@@ -257,10 +257,10 @@ export function getActiveConnections(): ActiveConnection[] {
 }
 
 // Get current metrics data for immediate UI loading - only real data points
-export function getCurrentMetricsData(): Record<string, { ts: number; rps: number; p95: number }[]> {
+export function getCurrentMetricsData(): Record<string, { ts: number; rps: number; p95: number; errors4xx: number; errors5xx: number }[]> {
   const now = Date.now()
   const oneHourAgo = now - ONE_HOUR
-  const result: Record<string, { ts: number; rps: number; p95: number }[]> = {}
+  const result: Record<string, { ts: number; rps: number; p95: number; errors4xx: number; errors5xx: number }[]> = {}
   
   for (const [key, e] of edges.entries()) {
     const conn = activeConnections.get(key)
@@ -284,7 +284,7 @@ export function getCurrentMetricsData(): Record<string, { ts: number; rps: numbe
     }
     
     // Create data points for each second that has data
-    const dataPoints: { ts: number; rps: number; p95: number }[] = []
+    const dataPoints: { ts: number; rps: number; p95: number; errors4xx: number; errors5xx: number }[] = []
     
     for (const [timestamp, latencies] of samplesBySecond.entries()) {
       const sortedLatencies = latencies.slice().sort((a, b) => a - b)
@@ -293,7 +293,9 @@ export function getCurrentMetricsData(): Record<string, { ts: number; rps: numbe
       dataPoints.push({
         ts: timestamp,
         rps: latencies.length, // Actual RPS (samples per second)
-        p95: Math.round(p95)
+        p95: Math.round(p95),
+        errors4xx: e.errors4xx, // Total 4xx errors for this edge
+        errors5xx: e.errors5xx  // Total 5xx errors for this edge
       })
     }
     

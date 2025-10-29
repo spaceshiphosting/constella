@@ -1,6 +1,7 @@
 "use client"
 import { useEffect, useState, useMemo } from 'react'
 import { STATIC_PEERS, NODE_COLORS } from '@/lib/config'
+import { MetricFrame } from '@/lib/types'
 
 type Peer = { id: string; name: string; url: string; region?: string; provider?: string; addedAt: string; version: string }
 
@@ -16,9 +17,11 @@ const TIME_WINDOWS: { value: TimeWindow; label: string; ms: number }[] = [
 
 export default function HomePage() {
   const [peers, setPeers] = useState<Peer[]>(STATIC_PEERS)
-  const [framesByEdge, setFramesByEdge] = useState<Record<string, { ts: number; rps: number; p95: number }[]>>({})
+  const [framesByEdge, setFramesByEdge] = useState<Record<string, { ts: number; rps: number; p95: number; errors4xx: number; errors5xx: number }[]>>({})
   const [selfName, setSelfName] = useState<string>('Unknown')
   const [timeWindow, setTimeWindow] = useState<TimeWindow>('1m')
+  const [isTimeWindowLoading, setIsTimeWindowLoading] = useState(false)
+  const [hiddenNodes, setHiddenNodes] = useState<Set<string>>(new Set())
 
   // Initialize with static peers
   useEffect(() => {
@@ -59,6 +62,17 @@ export default function HomePage() {
   // Get current time window in milliseconds
   const currentTimeWindowMs = TIME_WINDOWS.find(w => w.value === timeWindow)?.ms || 10 * 60 * 1000
 
+  // Handle time window change with loading state
+  const handleTimeWindowChange = (newTimeWindow: TimeWindow) => {
+    setIsTimeWindowLoading(true)
+    setTimeWindow(newTimeWindow)
+    
+    // Simulate a brief loading period for better UX
+    setTimeout(() => {
+      setIsTimeWindowLoading(false)
+    }, 300)
+  }
+
   // Auto-connect to SSE on load with throttling
   useEffect(() => {
     const es = new EventSource('/api/metrics/stream')
@@ -67,7 +81,7 @@ export default function HomePage() {
     
     es.onmessage = (ev) => {
       try {
-        const parsed = JSON.parse(ev.data) as { ts: number; nodeId: string; targetId: string; rps: number; p95: number }[]
+        const parsed = JSON.parse(ev.data) as MetricFrame[]
         const now = Date.now()
         
         // Throttle UI updates
@@ -76,15 +90,22 @@ export default function HomePage() {
         
         setFramesByEdge((prev) => {
           const copy = { ...prev }
-          const timeWindowAgo = now - currentTimeWindowMs
+          // Always retain up to the server's maximum retention window (1 hour)
+          const oneHourAgo = now - (60 * 60 * 1000)
           
           for (const f of parsed) {
             const key = `${f.nodeId}->${f.targetId}`
             const arr = copy[key] || []
-            arr.push({ ts: f.ts, rps: f.rps, p95: f.p95 })
+            arr.push({ 
+              ts: f.ts, 
+              rps: f.rps, 
+              p95: f.p95, 
+              errors4xx: f.errors['4xx'] || 0, 
+              errors5xx: f.errors['5xx'] || 0 
+            })
             
-            // Keep only data from the selected time window
-            const filtered = arr.filter(sample => sample.ts > timeWindowAgo)
+            // Keep only data from the last hour (server retention)
+            const filtered = arr.filter(sample => sample.ts > oneHourAgo)
             copy[key] = filtered
           }
           return copy
@@ -105,7 +126,7 @@ export default function HomePage() {
       const filteredFrames = frames.filter(frame => frame.ts > timeWindowAgo)
       if (filteredFrames.length > 0) acc[edge] = filteredFrames
       return acc
-    }, {} as Record<string, { ts: number; rps: number; p95: number }[]>)
+    }, {} as Record<string, { ts: number; rps: number; p95: number; errors4xx: number; errors5xx: number }[]>)
   }, [framesByEdge, currentTimeWindowMs])
 
   // Get colors for each edge based on destination node
@@ -140,23 +161,31 @@ export default function HomePage() {
           <div className="text-white/80">Live Metrics</div>
           <div className="flex items-center gap-3">
             <span className="text-white/50 text-xs">Time Window:</span>
-            <select
-              value={timeWindow}
-              onChange={(e) => setTimeWindow(e.target.value as TimeWindow)}
-              className="bg-white/10 border border-white/20 rounded px-3 py-1 text-sm text-white focus:outline-none focus:border-neonCyan/50"
-            >
-              {TIME_WINDOWS.map((window) => (
-                <option key={window.value} value={window.value} className="bg-gray-800">
-                  {window.label}
-                </option>
-              ))}
-            </select>
+            <div className="relative">
+              <select
+                value={timeWindow}
+                onChange={(e) => handleTimeWindowChange(e.target.value as TimeWindow)}
+                disabled={isTimeWindowLoading}
+                className="bg-white/10 border border-white/20 rounded px-3 py-1 text-sm text-white focus:outline-none focus:border-neonCyan/50 disabled:opacity-50 disabled:cursor-not-allowed pr-8"
+              >
+                {TIME_WINDOWS.map((window) => (
+                  <option key={window.value} value={window.value} className="bg-gray-800">
+                    {window.label}
+                  </option>
+                ))}
+              </select>
+              {isTimeWindowLoading && (
+                <div className="absolute right-2 top-1/2 transform -translate-y-1/2">
+                  <div className="w-3 h-3 border-2 border-neonCyan/30 border-t-neonCyan rounded-full animate-spin"></div>
+                </div>
+              )}
+            </div>
           </div>
         </div>
         {Object.keys(chartData).length === 0 ? (
           <div className="text-white/50 text-sm">No active connections. Connect to nodes to see live traffic.</div>
         ) : (
-          <div className="space-y-6">
+          <div className={`space-y-6 transition-opacity duration-300 ${isTimeWindowLoading ? 'opacity-50' : 'opacity-100'}`}>
             {/* Single Legend for All Charts */}
             <div className="flex flex-wrap gap-4 mb-4">
               {Object.entries(chartData).map(([edge, samples]) => {
@@ -170,7 +199,7 @@ export default function HomePage() {
                     />
                     <span className="text-sm text-white/80">{destination}</span>
                     <span className="text-xs text-white/60">
-                      RPS: {samples.at(-1)?.rps || 0} · Latency: {Math.round(samples.at(-1)?.p95 || 0)}ms
+                      RPS: {samples.at(-1)?.rps || 0} · Latency: {Math.round(samples.at(-1)?.p95 || 0)}ms · 4xx: {samples.at(-1)?.errors4xx || 0} · 5xx: {samples.at(-1)?.errors5xx || 0}
                     </span>
                   </div>
                 )
@@ -180,7 +209,7 @@ export default function HomePage() {
             {/* RPS Chart Section */}
             <div className="border border-white/10 rounded p-4">
               <div className="text-white/80 mb-3">Requests Per Second (RPS)</div>
-              <div className="text-white/50 text-xs mb-4">1-hour rolling window</div>
+              <div className="text-white/50 text-xs mb-4">Window: {TIME_WINDOWS.find(w => w.value === timeWindow)?.label}</div>
               <MultiLineChart 
                 data={chartData} 
                 metric="rps" 
@@ -195,7 +224,7 @@ export default function HomePage() {
             {/* Latency Chart Section */}
             <div className="border border-white/10 rounded p-4">
               <div className="text-white/80 mb-3">Response Time (p95 Latency)</div>
-              <div className="text-white/50 text-xs mb-4">1-hour rolling window</div>
+              <div className="text-white/50 text-xs mb-4">Window: {TIME_WINDOWS.find(w => w.value === timeWindow)?.label}</div>
               <MultiLineChart 
                 data={chartData} 
                 metric="p95" 
@@ -205,6 +234,41 @@ export default function HomePage() {
                 getAverageValue={(samples) => samples.length > 0 ? Math.round(samples.reduce((sum, s) => sum + s.p95, 0) / samples.length) : 0}
                 showLegend={false}
               />
+            </div>
+
+            {/* Status Code Chart Section */}
+            <div className="border border-white/10 rounded p-4">
+              <div className="text-white/80 mb-3">Error Rates (4xx & 5xx)</div>
+              <div className="text-white/50 text-xs mb-4">Window: {TIME_WINDOWS.find(w => w.value === timeWindow)?.label}</div>
+              <div className="space-y-4">
+                {/* 4xx Errors Chart */}
+                <div>
+                  <div className="text-white/60 text-sm mb-2">4xx Client Errors</div>
+                  <MultiLineChart 
+                    data={chartData} 
+                    metric="errors4xx" 
+                    color="#f59e0b"
+                    unit=""
+                    getCurrentValue={(samples) => samples.at(-1)?.errors4xx || 0}
+                    getAverageValue={(samples) => samples.length > 0 ? Math.round(samples.reduce((sum, s) => sum + s.errors4xx, 0) / samples.length) : 0}
+                    showLegend={false}
+                  />
+                </div>
+                
+                {/* 5xx Errors Chart */}
+                <div>
+                  <div className="text-white/60 text-sm mb-2">5xx Server Errors</div>
+                  <MultiLineChart 
+                    data={chartData} 
+                    metric="errors5xx" 
+                    color="#ef4444"
+                    unit=""
+                    getCurrentValue={(samples) => samples.at(-1)?.errors5xx || 0}
+                    getAverageValue={(samples) => samples.length > 0 ? Math.round(samples.reduce((sum, s) => sum + s.errors5xx, 0) / samples.length) : 0}
+                    showLegend={false}
+                  />
+                </div>
+              </div>
             </div>
           </div>
         )}
@@ -228,7 +292,16 @@ export default function HomePage() {
                 {peers.map((p) => (
                   <tr key={p.id} className="border-t border-white/10">
                     <td className="py-2">{p.name}</td>
-                    <td className="py-2">{p.url}</td>
+                    <td className="py-2">
+                      <a 
+                        href={p.url} 
+                        target="_blank" 
+                        rel="noopener noreferrer"
+                        className="text-neonCyan hover:text-neonCyan/80 hover:underline transition-colors"
+                      >
+                        {p.url}
+                      </a>
+                    </td>
                     <td className="py-2">
                       <span className="text-xs bg-white/10 px-2 py-1 rounded">
                         {p.provider}
@@ -254,12 +327,12 @@ function MultiLineChart({
   getAverageValue,
   showLegend = true
 }: { 
-  data: Record<string, { ts: number; rps: number; p95: number }[]>
-  metric: 'rps' | 'p95'
+  data: Record<string, { ts: number; rps: number; p95: number; errors4xx: number; errors5xx: number }[]>
+  metric: 'rps' | 'p95' | 'errors4xx' | 'errors5xx'
   color: string
   unit: string
-  getCurrentValue: (samples: { ts: number; rps: number; p95: number }[]) => number | string
-  getAverageValue: (samples: { ts: number; rps: number; p95: number }[]) => number | string
+  getCurrentValue: (samples: { ts: number; rps: number; p95: number; errors4xx: number; errors5xx: number }[]) => number | string
+  getAverageValue: (samples: { ts: number; rps: number; p95: number; errors4xx: number; errors5xx: number }[]) => number | string
   showLegend?: boolean
 }) {
   const [hoveredIndex, setHoveredIndex] = useState<number | null>(null)
