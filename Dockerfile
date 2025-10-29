@@ -9,7 +9,8 @@ WORKDIR /app
 
 # Install dependencies based on the preferred package manager
 COPY package.json package-lock.json* ./
-RUN npm ci --only=production
+# Install ALL deps for building (includes TypeScript)
+RUN npm ci
 
 # Rebuild the source code only when needed
 FROM base AS builder
@@ -35,7 +36,8 @@ ENV NEXT_TELEMETRY_DISABLED 1
 RUN addgroup --system --gid 1001 nodejs
 RUN adduser --system --uid 1001 nextjs
 
-COPY --from=builder /app/public ./public
+# Create public directory (Next.js expects it)
+RUN mkdir -p ./public
 
 # Set the correct permission for prerender cache
 RUN mkdir .next
