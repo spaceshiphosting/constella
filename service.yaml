@@ -18,12 +18,10 @@ spec:
       - image: gcr.io/PROJECT_ID/constella
         ports:
         - name: http1
-          containerPort: 3000
+          containerPort: 8080
         env:
         - name: NODE_ENV
           value: production
-        - name: PORT
-          value: "3000"
         resources:
           limits:
             cpu: "0.5"
@@ -34,7 +32,7 @@ spec:
         livenessProbe:
           httpGet:
             path: /
-            port: 3000
+            port: 8080
           initialDelaySeconds: 30
           periodSeconds: 10
           timeoutSeconds: 5
@@ -42,7 +40,7 @@ spec:
         readinessProbe:
           httpGet:
             path: /
-            port: 3000
+            port: 8080
           initialDelaySeconds: 5
           periodSeconds: 5
           timeoutSeconds: 3
