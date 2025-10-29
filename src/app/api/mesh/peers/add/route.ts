@@ -21,7 +21,25 @@ export async function POST(req: NextRequest) {
     if (!remoteResponse.ok) {
       return new NextResponse(`Failed to fetch remote node info: ${remoteResponse.status}`, { status: 400 })
     }
-    const remoteInfo = await remoteResponse.json()
+            const remoteInfo = await remoteResponse.json()
+            // Normalize remote node URL to the one we actually used to contact it.
+            // This guards against remotes reporting localhost when behind a proxy/hosted env.
+            const normalizedUrl = url.replace(/\/$/, '')
+            if (remoteInfo?.node) {
+              // Generate a proper ID if the remote returns "node-unknown"
+              let nodeId = remoteInfo.node.id
+              if (nodeId === 'node-unknown') {
+                const name = remoteInfo.node.name || remoteInfo.node.provider || 'unknown'
+                nodeId = name.toLowerCase().replace(/[^a-z0-9]/g, '-')
+              }
+              
+              remoteInfo.node = {
+                ...remoteInfo.node,
+                id: nodeId,
+                url: normalizedUrl,
+                name: remoteInfo.node.name || remoteInfo.node.provider || 'unknown',
+              }
+            }
     // No tombstones: single source of truth is .constella-peers.json
     
     // Step 2: Send our info to the remote node, along with our known peers
@@ -49,7 +67,7 @@ export async function POST(req: NextRequest) {
     }
 
     // Step 3: Register the remote node locally
-    upsertPeer(remoteInfo.node)
+            upsertPeer(remoteInfo.node)
 
     // Step 4: Get the updated peer list from remote (includes any peers they know about)
     const updatedPeers = await upsertResponse.json()
