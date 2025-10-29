@@ -13,14 +13,22 @@ export default function HomePage() {
     setPeers(STATIC_PEERS)
   }, [])
 
-  // Auto-connect to SSE on load
+  // Auto-connect to SSE on load with throttling
   useEffect(() => {
     const es = new EventSource('/api/metrics/stream')
     const oneHourAgo = Date.now() - (60 * 60 * 1000) // 1 hour ago
+    let lastUpdate = 0
+    const UPDATE_THROTTLE = 100 // Update UI max every 100ms
     
     es.onmessage = (ev) => {
       try {
         const parsed = JSON.parse(ev.data) as { ts: number; nodeId: string; targetId: string; rps: number; p95: number }[]
+        const now = Date.now()
+        
+        // Throttle UI updates
+        if (now - lastUpdate < UPDATE_THROTTLE) return
+        lastUpdate = now
+        
         setFramesByEdge((prev) => {
           const copy = { ...prev }
           for (const f of parsed) {

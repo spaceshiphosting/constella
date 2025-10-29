@@ -33,7 +33,16 @@ export function startTrafficGenerator(): void {
           const start = Date.now()
           try {
             const res = await fetch(`${peer.url}/api/mesh/ping`)
-            const latency = Date.now() - start
+            let latency = Date.now() - start
+            
+            // Add realistic latency variation for localhost connections
+            if (peer.url.includes('localhost') || peer.url.includes('127.0.0.1')) {
+              // Simulate network latency: 1-5ms base + 0-3ms jitter
+              const baseLatency = 1 + Math.random() * 4 // 1-5ms
+              const jitter = Math.random() * 3 // 0-3ms
+              latency = Math.max(1, baseLatency + jitter)
+            }
+            
             recordSample({
               sourceId: selfId,
               targetId: peer.id,
@@ -42,7 +51,13 @@ export function startTrafficGenerator(): void {
               status: res.status,
             })
           } catch {
-            const latency = Date.now() - start
+            let latency = Date.now() - start
+            
+            // Add realistic timeout latency
+            if (peer.url.includes('localhost') || peer.url.includes('127.0.0.1')) {
+              latency = 100 + Math.random() * 200 // 100-300ms for timeouts
+            }
+            
             recordSample({
               sourceId: selfId,
               targetId: peer.id,

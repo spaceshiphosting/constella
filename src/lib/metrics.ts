@@ -68,9 +68,10 @@ export function recordSample(params: {
   if (params.status && params.status >= 500) e.errors5xx += 1
   e.lastTs = now
   
-  // Clean up old data (older than 1 hour)
-  const cutoff = now - ONE_HOUR
-  e.latenciesMs = e.latenciesMs.filter(ts => ts > cutoff)
+  // Keep only recent latency samples (limit to last 3600 samples = 1 hour at 1 sample/second)
+  if (e.latenciesMs.length > 3600) {
+    e.latenciesMs = e.latenciesMs.slice(-3600)
+  }
 }
 
 function percentile(sorted: number[], p: number): number {
