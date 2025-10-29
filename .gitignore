@@ -19,8 +19,7 @@ pnpm-debug.log*
 # OS
 .DS_Store
 
-# Constella persistence
-.constella-peers.json
+# Constella persistence (removed - now using static config)
 
 # Editor
 .idea/

@@ -1,0 +1,75 @@
+[
+  {
+    "id": "vercel",
+    "name": "vercel",
+    "url": "https://constella-ivory.vercel.app",
+    "region": "nan",
+    "provider": "vercel",
+    "addedAt": "2025-10-29T11:20:30.737Z",
+    "version": "dev"
+  },
+  {
+    "id": "node-3001",
+    "name": "Node-B",
+    "url": "http://localhost:3001",
+    "region": "iad1",
+    "provider": "vercel",
+    "addedAt": "2025-10-29T11:20:35.065Z",
+    "version": "dev"
+  },
+  {
+    "id": "netlify",
+    "name": "netlify",
+    "url": "https://constellaspace.netlify.app",
+    "addedAt": "2025-10-29T11:20:35.044Z",
+    "version": "dev"
+  },
+  {
+    "id": "constellaspace-netlify-app",
+    "name": "constellaspace.netlify.app",
+    "url": "https://constellaspace.netlify.app",
+    "addedAt": "2025-10-29T11:25:38.771Z",
+    "version": "static"
+  },
+  {
+    "id": "constella-ivory-vercel-app",
+    "name": "constella-ivory.vercel.app",
+    "url": "https://constella-ivory.vercel.app",
+    "addedAt": "2025-10-29T11:25:38.771Z",
+    "version": "static"
+  },
+  {
+    "id": "localhost-3000",
+    "name": "localhost:3000",
+    "url": "http://localhost:3000",
+    "addedAt": "2025-10-29T11:25:38.772Z",
+    "version": "static"
+  },
+  {
+    "id": "netlify-node",
+    "name": "Netlify",
+    "url": "https://constellaspace.netlify.app",
+    "region": "us-east-1",
+    "provider": "netlify",
+    "addedAt": "2025-10-29T11:25:42.268Z",
+    "version": "1.0.0"
+  },
+  {
+    "id": "vercel-node",
+    "name": "Vercel",
+    "url": "https://constella-ivory.vercel.app",
+    "region": "us-east-1",
+    "provider": "vercel",
+    "addedAt": "2025-10-29T11:25:42.268Z",
+    "version": "1.0.0"
+  },
+  {
+    "id": "local-node",
+    "name": "Local Development",
+    "url": "http://localhost:3001",
+    "region": "local",
+    "provider": "local",
+    "addedAt": "2025-10-29T11:25:42.268Z",
+    "version": "dev"
+  }
+]

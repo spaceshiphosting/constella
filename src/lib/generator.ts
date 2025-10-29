@@ -1,5 +1,6 @@
-import { listPeers } from './registry'
+import { listPeers, upsertPeers } from './registry'
 import { recordSample, flushFrames, broadcast } from './metrics'
+import { STATIC_PEERS } from './config'
 
 let started = false
 
@@ -19,30 +20,39 @@ export function startTrafficGenerator(): void {
   setInterval(async () => {
     const selfId = getSelfId()
     const selfUrl = getSelfUrl()
+    
+    // Ensure static peers exist in registry
+    upsertPeers(STATIC_PEERS)
+
     const peers = listPeers().filter((p) => p.id !== selfId && p.url !== selfUrl)
-    // Issue one ping per peer (MVP). Extend to Poisson later.
+    // Send multiple pings per peer for better percentile calculations
     await Promise.all(
       peers.map(async (peer) => {
-        const start = Date.now()
-        try {
-          const res = await fetch(`${peer.url}/api/mesh/ping`)
-          const latency = Date.now() - start
-          recordSample({
-            sourceId: selfId,
-            targetId: peer.id,
-            latencyMs: latency,
-            ok: res.ok,
-            status: res.status,
-          })
-        } catch {
-          const latency = Date.now() - start
-          recordSample({
-            sourceId: selfId,
-            targetId: peer.id,
-            latencyMs: latency,
-            ok: false,
-            status: 599,
-          })
+        // Send 5 pings per peer per second for better statistics
+        for (let i = 0; i < 5; i++) {
+          const start = Date.now()
+          try {
+            const res = await fetch(`${peer.url}/api/mesh/ping`)
+            const latency = Date.now() - start
+            recordSample({
+              sourceId: selfId,
+              targetId: peer.id,
+              latencyMs: latency,
+              ok: res.ok,
+              status: res.status,
+            })
+          } catch {
+            const latency = Date.now() - start
+            recordSample({
+              sourceId: selfId,
+              targetId: peer.id,
+              latencyMs: latency,
+              ok: false,
+              status: 599,
+            })
+          }
+          // Small delay between pings to spread them out
+          if (i < 4) await new Promise(resolve => setTimeout(resolve, 50))
         }
       })
     )

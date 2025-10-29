@@ -114,11 +114,12 @@ export function flushFrames(): MetricFrame[] {
     }
     frames.push(frame)
     
-    // Reset rolling window for next second (but keep historical data)
+    // Reset counters for next second (but keep latency data for percentiles)
     e.errors4xx = 0
     e.errors5xx = 0
     e.bytesOut = 0
     e.samples = 0
+    // Note: We keep e.latenciesMs for percentile calculations
   }
   return frames
 }
