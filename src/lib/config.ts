@@ -4,7 +4,8 @@
 export const STATIC_PEER_URLS: string[] = [
   'https://constellaspace.netlify.app',
   'https://constella-ivory.vercel.app',
-  'https://constella-enya.onrender.com'
+  'https://constella-enya.onrender.com',
+  'https://constella-135766916723.europe-west1.run.app'
 ]
 
 export const STATIC_PEERS = [
@@ -37,6 +38,16 @@ export const STATIC_PEERS = [
     addedAt: new Date().toISOString(),
     version: '1.0.0',
     color: '#FF6B9D' // Nebula Pink - like a distant nebula
+  },
+  {
+    id: 'google-run',
+    name: 'Cloud Run (EU)',
+    url: 'https://constella-135766916723.europe-west1.run.app',
+    region: 'europe-west1',
+    provider: 'gcp',
+    addedAt: new Date().toISOString(),
+    version: '1.0.0',
+    color: '#34D399' // Aurora Green - fresh node in the constellation
   }
 ]
 
@@ -49,6 +60,7 @@ export const NODE_COLORS: Record<string, string> = {
   'constellaspace.netlify.app': '#00D4FF',
   'constella-ivory.vercel.app': '#FFD700',
   'constella-enya.onrender.com': '#FF6B9D',
+  'constella-135766916723.europe-west1.run.app': '#34D399',
   'localhost:3001': '#9D4EDD'
 }
 
