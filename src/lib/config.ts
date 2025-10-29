@@ -4,8 +4,7 @@
 export const STATIC_PEER_URLS: string[] = [
   'https://constellaspace.netlify.app',
   'https://constella-ivory.vercel.app',
-  'https://constella-enya.onrender.com',
-  'http://localhost:3001',
+  'https://constella-enya.onrender.com'
 ]
 
 export const STATIC_PEERS = [
@@ -38,16 +37,6 @@ export const STATIC_PEERS = [
     addedAt: new Date().toISOString(),
     version: '1.0.0',
     color: '#FF6B9D' // Nebula Pink - like a distant nebula
-  },
-  {
-    id: 'local-node',
-    name: 'Local Development',
-    url: 'http://localhost:3001',
-    region: 'local',
-    provider: 'local',
-    addedAt: new Date().toISOString(),
-    version: 'dev',
-    color: '#9D4EDD' // Purple Star - like a distant purple star
   }
 ]
 
