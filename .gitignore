@@ -1,3 +1,31 @@
+# Node
+node_modules
+.pnp.*
+
+# Env
+.env
+.env*.local
+
+# Next.js
+.next/
+out/
+
+# Logs
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+
+# OS
+.DS_Store
+
+# Constella persistence
+.constella-peers.json
+
+# Editor
+.idea/
+.vscode/*
+!.vscode/extensions.json
 # Logs
 logs
 *.log
