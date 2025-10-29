@@ -1,6 +1,6 @@
 import type { MetricFrame } from './types'
 
-// In-memory rolling metrics per edge for the last N seconds
+// In-memory rolling metrics per edge for the last 1 hour
 type EdgeKey = string // `${sourceId}->${targetId}`
 
 type EdgeStats = {
@@ -14,7 +14,18 @@ type EdgeStats = {
   lastTs: number
 }
 
+type ActiveConnection = {
+  nodeId: string
+  targetId: string
+  lastSeen: number
+}
+
 const edges = new Map<EdgeKey, EdgeStats>()
+const activeConnections = new Map<string, ActiveConnection>()
+
+// 1 hour in milliseconds
+const ONE_HOUR = 60 * 60 * 1000
+const INACTIVE_THRESHOLD = 5 * 60 * 1000 // 5 minutes
 
 export function recordSample(params: {
   sourceId: string
@@ -26,6 +37,14 @@ export function recordSample(params: {
 }): void {
   const key = `${params.sourceId}->${params.targetId}`
   const now = Date.now()
+  
+  // Update active connections
+  activeConnections.set(key, {
+    nodeId: params.sourceId,
+    targetId: params.targetId,
+    lastSeen: now
+  })
+  
   let e = edges.get(key)
   if (!e) {
     e = {
@@ -40,12 +59,18 @@ export function recordSample(params: {
     }
     edges.set(key, e)
   }
+  
+  // Add to rolling window (1 hour)
   e.latenciesMs.push(params.latencyMs)
   e.samples += 1
   e.bytesOut += params.bytesOut || 0
   if (params.status && params.status >= 400 && params.status < 500) e.errors4xx += 1
   if (params.status && params.status >= 500) e.errors5xx += 1
   e.lastTs = now
+  
+  // Clean up old data (older than 1 hour)
+  const cutoff = now - ONE_HOUR
+  e.latenciesMs = e.latenciesMs.filter(ts => ts > cutoff)
 }
 
 function percentile(sorted: number[], p: number): number {
@@ -57,7 +82,22 @@ function percentile(sorted: number[], p: number): number {
 export function flushFrames(): MetricFrame[] {
   const now = Date.now()
   const frames: MetricFrame[] = []
-  for (const e of edges.values()) {
+  
+  // Clean up inactive connections
+  for (const [key, conn] of activeConnections.entries()) {
+    if (now - conn.lastSeen > INACTIVE_THRESHOLD) {
+      activeConnections.delete(key)
+      edges.delete(key)
+    }
+  }
+  
+  // Only process active connections
+  for (const [key, e] of edges.entries()) {
+    const conn = activeConnections.get(key)
+    if (!conn || now - conn.lastSeen > INACTIVE_THRESHOLD) {
+      continue // Skip inactive connections
+    }
+    
     const arr = e.latenciesMs.slice().sort((a, b) => a - b)
     const rps = e.samples // per flush interval (assume 1s scheduler)
     const frame: MetricFrame = {
@@ -73,8 +113,8 @@ export function flushFrames(): MetricFrame[] {
       samples: e.samples,
     }
     frames.push(frame)
-    // reset rolling window for next second
-    e.latenciesMs = []
+    
+    // Reset rolling window for next second (but keep historical data)
     e.errors4xx = 0
     e.errors5xx = 0
     e.bytesOut = 0
@@ -106,6 +146,19 @@ export function broadcast(frames: MetricFrame[]): void {
       // best-effort
     }
   }
+}
+
+export function getActiveConnections(): ActiveConnection[] {
+  const now = Date.now()
+  const active: ActiveConnection[] = []
+  
+  for (const [key, conn] of activeConnections.entries()) {
+    if (now - conn.lastSeen <= INACTIVE_THRESHOLD) {
+      active.push(conn)
+    }
+  }
+  
+  return active
 }
 
 

@@ -24,6 +24,8 @@ export default function HomePage() {
   // Auto-connect to SSE on load
   useEffect(() => {
     const es = new EventSource('/api/metrics/stream')
+    const oneHourAgo = Date.now() - (60 * 60 * 1000) // 1 hour ago
+    
     es.onmessage = (ev) => {
       try {
         const parsed = JSON.parse(ev.data) as { ts: number; nodeId: string; targetId: string; rps: number; p95: number }[]
@@ -31,9 +33,12 @@ export default function HomePage() {
           const copy = { ...prev }
           for (const f of parsed) {
             const key = `${f.nodeId}->${f.targetId}`
-            const arr = copy[key] ? copy[key].slice(-59) : []
+            const arr = copy[key] || []
             arr.push({ ts: f.ts, rps: f.rps, p95: f.p95 })
-            copy[key] = arr
+            
+            // Keep only data from the last hour (3600 samples at 1s intervals)
+            const filtered = arr.filter(sample => sample.ts > oneHourAgo)
+            copy[key] = filtered
           }
           return copy
         })
@@ -109,15 +114,18 @@ export default function HomePage() {
       </div>
 
       <div className="glass-panel p-4 mb-6">
-        <div className="text-white/80 mb-2">Live Metrics</div>
+        <div className="flex items-center justify-between mb-2">
+          <div className="text-white/80">Live Metrics</div>
+          <div className="text-white/50 text-xs">1-hour rolling window</div>
+        </div>
         {Object.keys(framesByEdge).length === 0 ? (
-          <div className="text-white/50 text-sm">Waiting for samples...</div>
+          <div className="text-white/50 text-sm">No active connections. Add a peer to see live traffic.</div>
         ) : (
           <div className="space-y-4">
             {Object.entries(framesByEdge).map(([edge, samples]) => (
               <div key={edge} className="border border-white/10 rounded p-3">
                 <div className="flex items-center justify-between text-sm mb-2">
-                  <div className="text-white/80">{edge} </div>
+                  <div className="text-white/80">{edge}</div>
                   <div className="text-white/60">RPS: {samples.at(-1)?.rps || 0} · p95: {Math.round(samples.at(-1)?.p95 || 0)}ms</div>
                 </div>
                 <Sparkline data={samples.map(s => s.rps)} />
