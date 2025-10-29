@@ -4,10 +4,21 @@ import { STATIC_PEERS, NODE_COLORS } from '@/lib/config'
 
 type Peer = { id: string; name: string; url: string; region?: string; provider?: string; addedAt: string; version: string }
 
+type TimeWindow = '1h' | '30m' | '10m' | '5m' | '1m'
+
+const TIME_WINDOWS: { value: TimeWindow; label: string; ms: number }[] = [
+  { value: '1h', label: '1 Hour', ms: 60 * 60 * 1000 },
+  { value: '30m', label: '30 Minutes', ms: 30 * 60 * 1000 },
+  { value: '10m', label: '10 Minutes', ms: 10 * 60 * 1000 },
+  { value: '5m', label: '5 Minutes', ms: 5 * 60 * 1000 },
+  { value: '1m', label: '1 Minute', ms: 1 * 60 * 1000 },
+]
+
 export default function HomePage() {
   const [peers, setPeers] = useState<Peer[]>(STATIC_PEERS)
   const [framesByEdge, setFramesByEdge] = useState<Record<string, { ts: number; rps: number; p95: number }[]>>({})
   const [selfName, setSelfName] = useState<string>('Unknown')
+  const [timeWindow, setTimeWindow] = useState<TimeWindow>('1m')
 
   // Initialize with static peers
   useEffect(() => {
@@ -45,10 +56,12 @@ export default function HomePage() {
     loadSelf()
   }, [])
 
+  // Get current time window in milliseconds
+  const currentTimeWindowMs = TIME_WINDOWS.find(w => w.value === timeWindow)?.ms || 10 * 60 * 1000
+
   // Auto-connect to SSE on load with throttling
   useEffect(() => {
     const es = new EventSource('/api/metrics/stream')
-    const oneHourAgo = Date.now() - (60 * 60 * 1000) // 1 hour ago
     let lastUpdate = 0
     const UPDATE_THROTTLE = 100 // Update UI max every 100ms
     
@@ -63,13 +76,15 @@ export default function HomePage() {
         
         setFramesByEdge((prev) => {
           const copy = { ...prev }
+          const timeWindowAgo = now - currentTimeWindowMs
+          
           for (const f of parsed) {
             const key = `${f.nodeId}->${f.targetId}`
             const arr = copy[key] || []
             arr.push({ ts: f.ts, rps: f.rps, p95: f.p95 })
             
-            // Keep only data from the last hour (3600 samples at 1s intervals)
-            const filtered = arr.filter(sample => sample.ts > oneHourAgo)
+            // Keep only data from the selected time window
+            const filtered = arr.filter(sample => sample.ts > timeWindowAgo)
             copy[key] = filtered
           }
           return copy
@@ -80,15 +95,18 @@ export default function HomePage() {
       // Best-effort reconnect handled by browser
     }
     return () => es.close()
-  }, [])
+  }, [currentTimeWindowMs])
 
   // Memoized chart data processing for better performance
   const chartData = useMemo(() => {
+    const timeWindowAgo = Date.now() - currentTimeWindowMs
     return Object.entries(framesByEdge).reduce((acc, [edge, frames]) => {
-      if (frames.length > 0) acc[edge] = frames
+      // Filter frames to only include data within the selected time window
+      const filteredFrames = frames.filter(frame => frame.ts > timeWindowAgo)
+      if (filteredFrames.length > 0) acc[edge] = filteredFrames
       return acc
     }, {} as Record<string, { ts: number; rps: number; p95: number }[]>)
-  }, [framesByEdge])
+  }, [framesByEdge, currentTimeWindowMs])
 
   // Get colors for each edge based on destination node
   const getEdgeColor = (edge: string) => {
@@ -118,9 +136,22 @@ export default function HomePage() {
 
 
       <div className="glass-panel p-4 mb-6">
-        <div className="flex items-center justify-between mb-2">
+        <div className="flex items-center justify-between mb-4">
           <div className="text-white/80">Live Metrics</div>
-          <div className="text-white/50 text-xs">1-hour rolling window</div>
+          <div className="flex items-center gap-3">
+            <span className="text-white/50 text-xs">Time Window:</span>
+            <select
+              value={timeWindow}
+              onChange={(e) => setTimeWindow(e.target.value as TimeWindow)}
+              className="bg-white/10 border border-white/20 rounded px-3 py-1 text-sm text-white focus:outline-none focus:border-neonCyan/50"
+            >
+              {TIME_WINDOWS.map((window) => (
+                <option key={window.value} value={window.value} className="bg-gray-800">
+                  {window.label}
+                </option>
+              ))}
+            </select>
+          </div>
         </div>
         {Object.keys(chartData).length === 0 ? (
           <div className="text-white/50 text-sm">No active connections. Connect to nodes to see live traffic.</div>
@@ -264,7 +295,7 @@ function MultiLineChart({
   }
 
   return (
-    <div className="relative pl-12">
+    <div className="relative">
       {/* Legend - only show if showLegend is true */}
       {showLegend && (
         <div className="flex flex-wrap gap-4 mb-4">
@@ -295,52 +326,44 @@ function MultiLineChart({
         onMouseMove={handleMouseMove}
         onMouseLeave={handleMouseLeave}
       >
-        {/* Grid lines */}
-        <line x1="0" y1={height * 0.25} x2={width} y2={height * 0.25} stroke="#333" strokeWidth="1" opacity="0.3" />
-        <line x1="0" y1={height * 0.5} x2={width} y2={height * 0.5} stroke="#333" strokeWidth="1" opacity="0.3" />
-        <line x1="0" y1={height * 0.75} x2={width} y2={height * 0.75} stroke="#333" strokeWidth="1" opacity="0.3" />
-        
-        {/* Draw lines for each edge */}
-        {Object.entries(data).map(([edge, samples]) => {
-          const points = samples.map((d, i) => {
-            const x = (i / Math.max(1, samples.length - 1)) * width
-            const y = height - (d[metric] / maxValue) * height
-            return `${x},${y}`
-          }).join(' ')
+          {/* Grid lines */}
+          <line x1="0" y1={height * 0.8} x2={width} y2={height * 0.8} stroke="#333" strokeWidth="1" opacity="0.3" />
+          <line x1="0" y1={height * 0.6} x2={width} y2={height * 0.6} stroke="#333" strokeWidth="1" opacity="0.3" />
+          <line x1="0" y1={height * 0.4} x2={width} y2={height * 0.4} stroke="#333" strokeWidth="1" opacity="0.3" />
+          <line x1="0" y1={height * 0.2} x2={width} y2={height * 0.2} stroke="#333" strokeWidth="1" opacity="0.3" />
           
-          const edgeColor = getEdgeColor(edge)
-          
-          return (
-            <g key={edge}>
-              <polyline 
-                fill="none" 
-                stroke={edgeColor} 
-                strokeWidth="2" 
-                points={points} 
-              />
-              {hoveredIndex !== null && samples[hoveredIndex] && (
-                <circle
-                  cx={(hoveredIndex / Math.max(1, samples.length - 1)) * width}
-                  cy={height - (samples[hoveredIndex][metric] / maxValue) * height}
-                  r="4"
-                  fill={edgeColor}
-                  stroke="white"
-                  strokeWidth="2"
+          {/* Draw lines for each edge */}
+          {Object.entries(data).map(([edge, samples]) => {
+            const points = samples.map((d, i) => {
+              const x = (i / Math.max(1, samples.length - 1)) * width
+              const y = height - (d[metric] / maxValue) * height
+              return `${x},${y}`
+            }).join(' ')
+            
+            const edgeColor = getEdgeColor(edge)
+            
+            return (
+              <g key={edge}>
+                <polyline 
+                  fill="none" 
+                  stroke={edgeColor} 
+                  strokeWidth="2" 
+                  points={points} 
                 />
-              )}
-            </g>
-          )
+                {hoveredIndex !== null && samples[hoveredIndex] && (
+                  <circle
+                    cx={(hoveredIndex / Math.max(1, samples.length - 1)) * width}
+                    cy={height - (samples[hoveredIndex][metric] / maxValue) * height}
+                    r="4"
+                    fill={edgeColor}
+                    stroke="white"
+                    strokeWidth="2"
+                  />
+                )}
+              </g>
+            )
         })}
       </svg>
-      
-      {/* Y-axis labels - positioned to the left of the chart */}
-      <div className="absolute -left-12 top-0 text-xs text-white/50 text-right" style={{ width: '40px' }}>
-        <div style={{ transform: 'translateY(-4px)' }}>{Math.round(maxValue)}{unit}</div>
-        <div style={{ transform: `translateY(${height * 0.25 - 4}px)` }}>{Math.round(maxValue * 0.75)}{unit}</div>
-        <div style={{ transform: `translateY(${height * 0.5 - 4}px)` }}>{Math.round(maxValue * 0.5)}{unit}</div>
-        <div style={{ transform: `translateY(${height * 0.75 - 4}px)` }}>{Math.round(maxValue * 0.25)}{unit}</div>
-        <div style={{ transform: `translateY(${height - 4}px)` }}>0{unit}</div>
-      </div>
       
       {/* Hover tooltip */}
       {hoveredIndex !== null && (
