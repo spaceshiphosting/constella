@@ -1,12 +1,20 @@
 import type { MetricFrame } from './types'
+import { writeFileSync, readFileSync, existsSync } from 'fs'
+import { join } from 'path'
 
 // In-memory rolling metrics per edge for the last 1 hour
 type EdgeKey = string // `${sourceId}->${targetId}`
+
+type LatencySample = {
+  latencyMs: number
+  timestamp: number
+}
 
 type EdgeStats = {
   sourceId: string
   targetId: string
   latenciesMs: number[]
+  latencySamples: LatencySample[] // Store actual samples with timestamps
   errors4xx: number
   errors5xx: number
   bytesOut: number
@@ -20,12 +28,88 @@ type ActiveConnection = {
   lastSeen: number
 }
 
+type PersistedData = {
+  edges: Record<EdgeKey, EdgeStats>
+  activeConnections: Record<string, ActiveConnection>
+  lastSaved: number
+}
+
 const edges = new Map<EdgeKey, EdgeStats>()
 const activeConnections = new Map<string, ActiveConnection>()
+
+// Persistence file path
+const PERSISTENCE_FILE = join(process.cwd(), '.constella-metrics.json')
+
+// Load persisted data on startup
+function loadPersistedData(): void {
+  try {
+    if (existsSync(PERSISTENCE_FILE)) {
+      const data = JSON.parse(readFileSync(PERSISTENCE_FILE, 'utf8')) as PersistedData
+      const oneHourAgo = Date.now() - ONE_HOUR
+      
+      // Only load data from the last hour
+      for (const [key, edgeStats] of Object.entries(data.edges)) {
+        if (edgeStats.lastTs > oneHourAgo) {
+          // Ensure latencySamples exists (for backward compatibility)
+          if (!edgeStats.latencySamples) {
+            edgeStats.latencySamples = []
+          }
+          edges.set(key, edgeStats)
+        }
+      }
+      
+      for (const [key, conn] of Object.entries(data.activeConnections)) {
+        if (conn.lastSeen > oneHourAgo) {
+          activeConnections.set(key, conn)
+        }
+      }
+    }
+  } catch (error) {
+    console.warn('Failed to load persisted metrics:', error)
+  }
+}
+
+// Save data to disk
+function savePersistedData(): void {
+  try {
+    const data: PersistedData = {
+      edges: Object.fromEntries(edges),
+      activeConnections: Object.fromEntries(activeConnections),
+      lastSaved: Date.now()
+    }
+    writeFileSync(PERSISTENCE_FILE, JSON.stringify(data, null, 2))
+  } catch (error) {
+    console.warn('Failed to save metrics:', error)
+  }
+}
 
 // 1 hour in milliseconds
 const ONE_HOUR = 60 * 60 * 1000
 const INACTIVE_THRESHOLD = 5 * 60 * 1000 // 5 minutes
+
+// Load data on module initialization
+loadPersistedData()
+
+// Save data every 30 seconds
+setInterval(savePersistedData, 30000)
+
+// Clean up old data every 5 minutes to respect 1-hour window
+setInterval(() => {
+  const now = Date.now()
+  const oneHourAgo = now - ONE_HOUR
+  
+  // Clean up old latency samples from all edges
+  for (const [key, e] of edges.entries()) {
+    e.latencySamples = e.latencySamples.filter(sample => sample.timestamp > oneHourAgo)
+    e.latenciesMs = e.latencySamples.map(s => s.latencyMs)
+    
+    // Remove edges with no recent data
+    if (e.latencySamples.length === 0 && now - e.lastTs > ONE_HOUR) {
+      edges.delete(key)
+      activeConnections.delete(key)
+    }
+  }
+}, 5 * 60 * 1000) // Every 5 minutes
 
 export function recordSample(params: {
   sourceId: string
@@ -51,6 +135,7 @@ export function recordSample(params: {
       sourceId: params.sourceId,
       targetId: params.targetId,
       latenciesMs: [],
+      latencySamples: [],
       errors4xx: 0,
       errors5xx: 0,
       bytesOut: 0,
@@ -61,17 +146,19 @@ export function recordSample(params: {
   }
   
   // Add to rolling window (1 hour)
-  e.latenciesMs.push(params.latencyMs)
+  e.latencySamples.push({ latencyMs: params.latencyMs, timestamp: now })
   e.samples += 1
   e.bytesOut += params.bytesOut || 0
   if (params.status && params.status >= 400 && params.status < 500) e.errors4xx += 1
   if (params.status && params.status >= 500) e.errors5xx += 1
   e.lastTs = now
   
-  // Keep only recent latency samples (limit to last 3600 samples = 1 hour at 1 sample/second)
-  if (e.latenciesMs.length > 3600) {
-    e.latenciesMs = e.latenciesMs.slice(-3600)
-  }
+  // Keep only recent latency samples (limit to last 1 hour)
+  const oneHourAgo = now - ONE_HOUR
+  e.latencySamples = e.latencySamples.filter(sample => sample.timestamp > oneHourAgo)
+  
+  // Update latenciesMs array from filtered samples
+  e.latenciesMs = e.latencySamples.map(s => s.latencyMs)
 }
 
 function percentile(sorted: number[], p: number): number {
@@ -83,6 +170,7 @@ function percentile(sorted: number[], p: number): number {
 export function flushFrames(): MetricFrame[] {
   const now = Date.now()
   const frames: MetricFrame[] = []
+  const oneHourAgo = now - ONE_HOUR
   
   // Clean up inactive connections
   for (const [key, conn] of activeConnections.entries()) {
@@ -98,6 +186,12 @@ export function flushFrames(): MetricFrame[] {
     if (!conn || now - conn.lastSeen > INACTIVE_THRESHOLD) {
       continue // Skip inactive connections
     }
+    
+    // Clean up old latency samples to respect 1-hour window
+    e.latencySamples = e.latencySamples.filter(sample => sample.timestamp > oneHourAgo)
+    
+    // Update latenciesMs array from filtered samples for percentile calculations
+    e.latenciesMs = e.latencySamples.map(s => s.latencyMs)
     
     const arr = e.latenciesMs.slice().sort((a, b) => a - b)
     const rps = e.samples // per flush interval (assume 1s scheduler)
@@ -115,12 +209,11 @@ export function flushFrames(): MetricFrame[] {
     }
     frames.push(frame)
     
-    // Reset counters for next second (but keep latency data for percentiles)
+    // Reset counters for next second
     e.errors4xx = 0
     e.errors5xx = 0
     e.bytesOut = 0
     e.samples = 0
-    // Note: We keep e.latenciesMs for percentile calculations
   }
   return frames
 }
@@ -161,6 +254,58 @@ export function getActiveConnections(): ActiveConnection[] {
   }
   
   return active
+}
+
+// Get current metrics data for immediate UI loading - only real data points
+export function getCurrentMetricsData(): Record<string, { ts: number; rps: number; p95: number }[]> {
+  const now = Date.now()
+  const oneHourAgo = now - ONE_HOUR
+  const result: Record<string, { ts: number; rps: number; p95: number }[]> = {}
+  
+  for (const [key, e] of edges.entries()) {
+    const conn = activeConnections.get(key)
+    if (!conn || now - conn.lastSeen > INACTIVE_THRESHOLD) {
+      continue // Skip inactive connections
+    }
+    
+    // Only use real samples with timestamps
+    const recentSamples = e.latencySamples.filter(sample => sample.timestamp > oneHourAgo)
+    if (recentSamples.length === 0) continue
+    
+    // Group samples by second to calculate RPS and p95 per second
+    const samplesBySecond = new Map<number, number[]>()
+    
+    for (const sample of recentSamples) {
+      const second = Math.floor(sample.timestamp / 1000) * 1000 // Round to second
+      if (!samplesBySecond.has(second)) {
+        samplesBySecond.set(second, [])
+      }
+      samplesBySecond.get(second)!.push(sample.latencyMs)
+    }
+    
+    // Create data points for each second that has data
+    const dataPoints: { ts: number; rps: number; p95: number }[] = []
+    
+    for (const [timestamp, latencies] of samplesBySecond.entries()) {
+      const sortedLatencies = latencies.slice().sort((a, b) => a - b)
+      const p95 = percentile(sortedLatencies, 95)
+      
+      dataPoints.push({
+        ts: timestamp,
+        rps: latencies.length, // Actual RPS (samples per second)
+        p95: Math.round(p95)
+      })
+    }
+    
+    // Sort by timestamp
+    dataPoints.sort((a, b) => a.ts - b.ts)
+    
+    if (dataPoints.length > 0) {
+      result[key] = dataPoints
+    }
+  }
+  
+  return result
 }
 
 

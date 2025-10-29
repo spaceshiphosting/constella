@@ -16,7 +16,8 @@ export const STATIC_PEERS = [
     region: 'us-east-1',
     provider: 'netlify',
     addedAt: new Date().toISOString(),
-    version: '1.0.0'
+    version: '1.0.0',
+    color: '#00D4FF' // Bright Star Blue - like a bright star in the constellation
   },
   {
     id: 'vercel',
@@ -25,7 +26,8 @@ export const STATIC_PEERS = [
     region: 'us-east-1',
     provider: 'vercel',
     addedAt: new Date().toISOString(),
-    version: '1.0.0'
+    version: '1.0.0',
+    color: '#FFD700' // Golden Star - the brightest star in the constellation
   },
   {
     id: 'render',
@@ -34,7 +36,8 @@ export const STATIC_PEERS = [
     region: 'us-east-1',
     provider: 'render',
     addedAt: new Date().toISOString(),
-    version: '1.0.0'
+    version: '1.0.0',
+    color: '#FF6B9D' // Nebula Pink - like a distant nebula
   },
   {
     id: 'local-node',
@@ -43,8 +46,21 @@ export const STATIC_PEERS = [
     region: 'local',
     provider: 'local',
     addedAt: new Date().toISOString(),
-    version: 'dev'
+    version: 'dev',
+    color: '#9D4EDD' // Purple Star - like a distant purple star
   }
 ]
+
+// Color mapping for easy lookup
+export const NODE_COLORS: Record<string, string> = {
+  'netlify': '#00D4FF',
+  'vercel': '#FFD700',
+  'render': '#FF6B9D',
+  'local-node': '#9D4EDD',
+  'constellaspace.netlify.app': '#00D4FF',
+  'constella-ivory.vercel.app': '#FFD700',
+  'constella-enya.onrender.com': '#FF6B9D',
+  'localhost:3001': '#9D4EDD'
+}
 
 

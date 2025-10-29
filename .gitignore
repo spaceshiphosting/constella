@@ -19,7 +19,8 @@ pnpm-debug.log*
 # OS
 .DS_Store
 
-# Constella persistence (removed - now using static config)
+# Constella persistence files
+.constella-metrics.json
 
 # Editor
 .idea/
