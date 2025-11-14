@@ -16,7 +16,7 @@ export function startTrafficGenerator(): void {
   if (started) return
   started = true
 
-  // Scheduler: every 1s flush metrics and send new requests
+  // Scheduler: every 10s flush metrics and send new requests
   setInterval(async () => {
     const selfId = getSelfId()
     const selfUrl = getSelfUrl()
@@ -75,7 +75,7 @@ export function startTrafficGenerator(): void {
     // Flush and broadcast
     const frames = flushFrames()
     broadcast(frames)
-  }, 1000)
+  }, 10000)
 }
 
 // Auto-start once per process using a global guard so it runs server-side without UI
