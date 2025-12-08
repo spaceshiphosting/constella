@@ -68,6 +68,16 @@ export const STATIC_PEERS = [
     addedAt: new Date().toISOString(),
     version: '1.0.0',
     color: '#ec840cff' // Random generated color
+  },
+  {
+    id: 'azure',
+    name: 'Azure Container Apps',
+    url: 'https://constella.braveforest-c5469d6a.eastus.azurecontainerapps.io',
+    region: 'East US',
+    provider: 'azure',
+    addedAt: new Date().toISOString(),
+    version: '1.0.0',
+    color: '#df190aff' // Random generated color
   }
 ]
 
@@ -76,11 +86,18 @@ export const NODE_COLORS: Record<string, string> = {
   'netlify': '#00D4FF',
   'vercel': '#FFD700',
   'render': '#FF6B9D',
+  'google-run': '#34D399',
+  'heroku': '#7923dbff',
+  'aws': '#ec840cff',
+  'azure': '#df190aff',
   'local-node': '#9D4EDD',
   'constellaspace.netlify.app': '#00D4FF',
   'constella-ivory.vercel.app': '#FFD700',
   'constella-enya.onrender.com': '#FF6B9D',
   'constella-135766916723.europe-west1.run.app': '#34D399',
+  'hyperlift-test-58b90c6a2b3e.herokuapp.com': '#7923dbff',
+  'fjvigedypz.us-east-1.awsapprunner.com': '#ec840cff',
+  'constella.braveforest-c5469d6a.eastus.azurecontainerapps.io': '#df190aff',
   'localhost:3001': '#9D4EDD'
 }
 
