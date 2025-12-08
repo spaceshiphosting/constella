@@ -48,6 +48,26 @@ export const STATIC_PEERS = [
     addedAt: new Date().toISOString(),
     version: '1.0.0',
     color: '#34D399' // Aurora Green - fresh node in the constellation
+  },
+  {
+    id: 'heroku',
+    name: 'Heroku',
+    url: 'https://hyperlift-test-58b90c6a2b3e.herokuapp.com',
+    region: 'us',
+    provider: 'heroku',
+    addedAt: new Date().toISOString(),
+    version: '1.0.0',
+    color: '#7923dbff' // Random generated color
+  },
+  {
+    id: 'aws',
+    name: 'AWS App Runner',
+    url: 'https://fjvigedypz.us-east-1.awsapprunner.com',
+    region: 'us-east-1',
+    provider: 'aws',
+    addedAt: new Date().toISOString(),
+    version: '1.0.0',
+    color: '#ec840cff' // Random generated color
   }
 ]
 
